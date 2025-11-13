@@ -165,7 +165,7 @@ resource "eon_backup_policy" "high_frequency_backup" {
   backup_plan = {
     backup_policy_type = "HIGH_FREQUENCY"
     high_frequency_plan = {
-      resource_types = ["AWS_S3", "AWS_DYNAMO_DB"]
+      resource_types = ["AWS_S3", "AWS_DYNAMO_DB", "GCP_CLOUD_STORAGE_BUCKET"]
       backup_schedules = [
         {
           vault_id       = "e19a6ad1-6a97-49a1-b7c9-9620977ea018"
