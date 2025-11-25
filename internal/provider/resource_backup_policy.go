@@ -747,7 +747,7 @@ func (r *BackupPolicyResource) Schema(ctx context.Context, req resource.SchemaRe
 													Required:            true,
 													Attributes: map[string]schema.Attribute{
 														"interval_minutes": schema.Int64Attribute{
-															MarkdownDescription: "Interval in hours",
+															MarkdownDescription: "Interval in minutes",
 															Required:            true,
 														},
 														"start_window_minutes": schema.Int64Attribute{
@@ -1477,7 +1477,17 @@ func createStandardScheduleConfig(schedule *BackupScheduleModel) (*externalEonSd
 				return nil, fmt.Errorf("invalid interval minutes: %s", err)
 			}
 
-			intervalConfig := externalEonSdkAPI.NewStandardIntervalConfig(intervalMinutes)
+			// Despite the field name "interval_minutes", the SDK/API expects hours for standard interval backups
+			// Convert minutes to hours
+			if intervalMinutes%60 != 0 {
+				return nil, fmt.Errorf("interval_minutes must be a multiple of 60 (whole hours), got %d", intervalMinutes)
+			}
+			intervalHours := intervalMinutes / 60
+			if intervalHours != 6 && intervalHours != 8 && intervalHours != 12 {
+				return nil, fmt.Errorf("standard backup interval must be 6, 8, or 12 hours (360, 480, or 720 minutes), got %d hours (%d minutes)", intervalHours, intervalMinutes)
+			}
+
+			intervalConfig := externalEonSdkAPI.NewStandardIntervalConfig(intervalHours)
 
 			if startWindowObj, exists := intervalConfigAttrs["start_window_minutes"]; exists && !startWindowObj.IsNull() {
 				startWindow, err := SafeInt32Conversion(startWindowObj.(types.Int64).ValueInt64())
@@ -1521,12 +1531,13 @@ func createHighFrequencyScheduleConfig(schedule *BackupScheduleModel) (*external
 
 		intervalConfigAttrs := intervalConfigObj.(types.Object).Attributes()
 
-		intervalHours, err := SafeInt32Conversion(intervalConfigAttrs["interval_minutes"].(types.Int64).ValueInt64())
+		intervalMinutes, err := SafeInt32Conversion(intervalConfigAttrs["interval_minutes"].(types.Int64).ValueInt64())
 		if err != nil {
-			return nil, fmt.Errorf("invalid interval hours: %s", err)
+			return nil, fmt.Errorf("invalid interval minutes: %s", err)
 		}
 
-		intervalConfig := externalEonSdkAPI.NewHighFrequencyIntervalConfig(intervalHours)
+		// High frequency intervals expect minutes (SDK field is IntervalMinutes)
+		intervalConfig := externalEonSdkAPI.NewHighFrequencyIntervalConfig(intervalMinutes)
 		highFreqScheduleConfig.SetIntervalConfig(*intervalConfig)
 
 		return highFreqScheduleConfig, nil
