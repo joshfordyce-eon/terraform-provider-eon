@@ -535,17 +535,15 @@ Required:
 Required:
 
 - `frequency` (String) Frequency: 'INTERVAL'
-- `interval_config` (Attributes) Interval configuration (see [below for nested schema](#nestedatt--backup_plan--high_frequency_plan--backup_schedules--schedule_config--interval_config))
+- `interval_config` (Attributes) Interval configuration. Specify either interval_minutes OR interval_hours (not both) (see [below for nested schema](#nestedatt--backup_plan--high_frequency_plan--backup_schedules--schedule_config--interval_config))
 
 <a id="nestedatt--backup_plan--high_frequency_plan--backup_schedules--schedule_config--interval_config"></a>
 ### Nested Schema for `backup_plan.high_frequency_plan.backup_schedules.schedule_config.interval_config`
 
-Required:
-
-- `interval_minutes` (Number) Interval in minutes
-
 Optional:
 
+- `interval_hours` (Number) Interval in hours for high frequency backups. Either this or interval_minutes must be specified (not both). Will be converted to minutes
+- `interval_minutes` (Number) Interval in minutes for high frequency backups. Either this or interval_hours must be specified (not both)
 - `start_window_minutes` (Number) Start window in minutes
 
 
@@ -579,7 +577,7 @@ Optional:
 
 - `annually_config` (Attributes) Annually configuration (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--annually_config))
 - `daily_config` (Attributes) Daily configuration (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--daily_config))
-- `interval_config` (Attributes) Interval configuration (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--interval_config))
+- `interval_config` (Attributes) Interval configuration. Specify either interval_minutes OR interval_hours (not both) (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--interval_config))
 - `monthly_config` (Attributes) Monthly configuration (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--monthly_config))
 - `weekly_config` (Attributes) Weekly configuration (see [below for nested schema](#nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--weekly_config))
 
@@ -611,12 +609,10 @@ Optional:
 <a id="nestedatt--backup_plan--standard_plan--backup_schedules--schedule_config--interval_config"></a>
 ### Nested Schema for `backup_plan.standard_plan.backup_schedules.schedule_config.interval_config`
 
-Required:
-
-- `interval_minutes` (Number) Interval in minutes
-
 Optional:
 
+- `interval_hours` (Number) Interval in hours. Either this or interval_minutes must be specified (not both). More convenient for STANDARD policies
+- `interval_minutes` (Number) Interval in minutes. Either this or interval_hours must be specified (not both). For STANDARD policies, must be divisible by 60
 - `start_window_minutes` (Number) Start window in minutes
 
 

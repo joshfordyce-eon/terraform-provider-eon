@@ -91,6 +91,7 @@ type AnnuallyConfigModel struct {
 
 type IntervalConfigModel struct {
 	IntervalMinutes    types.Int64 `tfsdk:"interval_minutes"`
+	IntervalHours      types.Int64 `tfsdk:"interval_hours"`
 	StartWindowMinutes types.Int64 `tfsdk:"start_window_minutes"`
 }
 
@@ -692,12 +693,16 @@ func (r *BackupPolicyResource) Schema(ctx context.Context, req resource.SchemaRe
 													},
 												},
 												"interval_config": schema.SingleNestedAttribute{
-													MarkdownDescription: "Interval configuration",
+													MarkdownDescription: "Interval configuration. Specify either interval_minutes OR interval_hours (not both)",
 													Optional:            true,
 													Attributes: map[string]schema.Attribute{
 														"interval_minutes": schema.Int64Attribute{
-															MarkdownDescription: "Interval in minutes",
-															Required:            true,
+															MarkdownDescription: "Interval in minutes. Either this or interval_hours must be specified (not both). For STANDARD policies, must be divisible by 60",
+															Optional:            true,
+														},
+														"interval_hours": schema.Int64Attribute{
+															MarkdownDescription: "Interval in hours. Either this or interval_minutes must be specified (not both). More convenient for STANDARD policies",
+															Optional:            true,
 														},
 														"start_window_minutes": schema.Int64Attribute{
 															MarkdownDescription: "Start window in minutes",
@@ -743,12 +748,16 @@ func (r *BackupPolicyResource) Schema(ctx context.Context, req resource.SchemaRe
 													Required:            true,
 												},
 												"interval_config": schema.SingleNestedAttribute{
-													MarkdownDescription: "Interval configuration",
+													MarkdownDescription: "Interval configuration. Specify either interval_minutes OR interval_hours (not both)",
 													Required:            true,
 													Attributes: map[string]schema.Attribute{
 														"interval_minutes": schema.Int64Attribute{
-															MarkdownDescription: "Interval in minutes",
-															Required:            true,
+															MarkdownDescription: "Interval in minutes for high frequency backups. Either this or interval_hours must be specified (not both)",
+															Optional:            true,
+														},
+														"interval_hours": schema.Int64Attribute{
+															MarkdownDescription: "Interval in hours for high frequency backups. Either this or interval_minutes must be specified (not both). Will be converted to minutes",
+															Optional:            true,
 														},
 														"start_window_minutes": schema.Int64Attribute{
 															MarkdownDescription: "Start window in minutes",
@@ -1472,19 +1481,45 @@ func createStandardScheduleConfig(schedule *BackupScheduleModel) (*externalEonSd
 		if intervalConfigObj, exists := scheduleConfigAttrs["interval_config"]; exists && !intervalConfigObj.IsNull() {
 			intervalConfigAttrs := intervalConfigObj.(types.Object).Attributes()
 
-			intervalMinutes, err := SafeInt32Conversion(intervalConfigAttrs["interval_minutes"].(types.Int64).ValueInt64())
-			if err != nil {
-				return nil, fmt.Errorf("invalid interval minutes: %s", err)
+			intervalMinutesObj := intervalConfigAttrs["interval_minutes"]
+			intervalHoursObj := intervalConfigAttrs["interval_hours"]
+
+			hasMinutes := intervalMinutesObj != nil && !intervalMinutesObj.(types.Int64).IsNull()
+			hasHours := intervalHoursObj != nil && !intervalHoursObj.(types.Int64).IsNull()
+
+			if !hasMinutes && !hasHours {
+				return nil, fmt.Errorf("either interval_minutes or interval_hours must be specified for INTERVAL frequency")
+			}
+			if hasMinutes && hasHours {
+				return nil, fmt.Errorf("cannot specify both interval_minutes and interval_hours, please provide only one")
 			}
 
-			// Despite the field name "interval_minutes", the SDK/API expects hours for standard interval backups
-			// Convert minutes to hours
-			if intervalMinutes%60 != 0 {
-				return nil, fmt.Errorf("interval_minutes must be a multiple of 60 (whole hours), got %d", intervalMinutes)
-			}
-			intervalHours := intervalMinutes / 60
-			if intervalHours != 6 && intervalHours != 8 && intervalHours != 12 {
-				return nil, fmt.Errorf("standard backup interval must be 6, 8, or 12 hours (360, 480, or 720 minutes), got %d hours (%d minutes)", intervalHours, intervalMinutes)
+			var intervalHours int32
+			var err error
+
+			if hasMinutes {
+				intervalMinutes, err := SafeInt32Conversion(intervalMinutesObj.(types.Int64).ValueInt64())
+				if err != nil {
+					return nil, fmt.Errorf("invalid interval_minutes: %s", err)
+				}
+
+				if intervalMinutes%60 != 0 {
+					return nil, fmt.Errorf("interval_minutes must be divisible by 60 for STANDARD policies (got %d minutes). Use HIGH_FREQUENCY policy for sub-hourly intervals", intervalMinutes)
+				}
+				intervalHours = intervalMinutes / 60
+
+				if intervalHours != 6 && intervalHours != 8 && intervalHours != 12 {
+					return nil, fmt.Errorf("standard backup interval must be 6, 8, or 12 hours (360, 480, or 720 minutes), got %d hours (%d minutes)", intervalHours, intervalMinutes)
+				}
+			} else {
+				intervalHours, err = SafeInt32Conversion(intervalHoursObj.(types.Int64).ValueInt64())
+				if err != nil {
+					return nil, fmt.Errorf("invalid interval_hours: %s", err)
+				}
+
+				if intervalHours != 6 && intervalHours != 8 && intervalHours != 12 {
+					return nil, fmt.Errorf("standard backup interval must be 6, 8, or 12 hours, got %d hours", intervalHours)
+				}
 			}
 
 			intervalConfig := externalEonSdkAPI.NewStandardIntervalConfig(intervalHours)
@@ -1531,12 +1566,35 @@ func createHighFrequencyScheduleConfig(schedule *BackupScheduleModel) (*external
 
 		intervalConfigAttrs := intervalConfigObj.(types.Object).Attributes()
 
-		intervalMinutes, err := SafeInt32Conversion(intervalConfigAttrs["interval_minutes"].(types.Int64).ValueInt64())
-		if err != nil {
-			return nil, fmt.Errorf("invalid interval minutes: %s", err)
+		intervalMinutesObj := intervalConfigAttrs["interval_minutes"]
+		intervalHoursObj := intervalConfigAttrs["interval_hours"]
+
+		hasMinutes := intervalMinutesObj != nil && !intervalMinutesObj.(types.Int64).IsNull()
+		hasHours := intervalHoursObj != nil && !intervalHoursObj.(types.Int64).IsNull()
+
+		if !hasMinutes && !hasHours {
+			return nil, fmt.Errorf("either interval_minutes or interval_hours must be specified for INTERVAL frequency")
+		}
+		if hasMinutes && hasHours {
+			return nil, fmt.Errorf("cannot specify both interval_minutes and interval_hours, please provide only one")
 		}
 
-		// High frequency intervals expect minutes (SDK field is IntervalMinutes)
+		var intervalMinutes int32
+		var err error
+
+		if hasMinutes {
+			intervalMinutes, err = SafeInt32Conversion(intervalMinutesObj.(types.Int64).ValueInt64())
+			if err != nil {
+				return nil, fmt.Errorf("invalid interval_minutes: %s", err)
+			}
+		} else {
+			intervalHours, err := SafeInt32Conversion(intervalHoursObj.(types.Int64).ValueInt64())
+			if err != nil {
+				return nil, fmt.Errorf("invalid interval_hours: %s", err)
+			}
+			intervalMinutes = intervalHours * 60
+		}
+
 		intervalConfig := externalEonSdkAPI.NewHighFrequencyIntervalConfig(intervalMinutes)
 		highFreqScheduleConfig.SetIntervalConfig(*intervalConfig)
 
