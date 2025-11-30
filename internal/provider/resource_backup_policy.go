@@ -747,7 +747,7 @@ func (r *BackupPolicyResource) Schema(ctx context.Context, req resource.SchemaRe
 													Required:            true,
 													Attributes: map[string]schema.Attribute{
 														"interval_minutes": schema.Int64Attribute{
-															MarkdownDescription: "Interval in hours",
+															MarkdownDescription: "Interval in minutes",
 															Required:            true,
 														},
 														"start_window_minutes": schema.Int64Attribute{
