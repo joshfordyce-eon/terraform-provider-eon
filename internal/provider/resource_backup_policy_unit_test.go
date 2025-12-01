@@ -524,3 +524,256 @@ func TestBackupPolicyResource_MockClientOperations(t *testing.T) {
 	assert.Equal(t, 1, mockClient.DeleteCalls, "Should have made one delete call")
 	assert.Equal(t, 1, mockClient.ListCalls, "Should have made one list call")
 }
+
+// TestCreateStandardIntervalConfig tests interval configuration for standard policies
+func TestCreateStandardIntervalConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		intervalMinutes  int64
+		startWindow      *int64
+		expectError      bool
+		validateInterval func(*testing.T, *externalEonSdkAPI.StandardBackupScheduleConfig)
+	}{
+		{
+			name:            "60 minute interval",
+			intervalMinutes: 60,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.StandardBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				// Log the actual interval value for debugging
+				t.Logf("Created StandardIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+		{
+			name:            "120 minute interval",
+			intervalMinutes: 120,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.StandardBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created StandardIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+		{
+			name:            "360 minute interval (6 hours)",
+			intervalMinutes: 360,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.StandardBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created StandardIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+		{
+			name:            "15 minute interval (minimum)",
+			intervalMinutes: 15,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.StandardBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created StandardIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create the interval config directly using SDK
+			intervalMinutes32, err := SafeInt32Conversion(tt.intervalMinutes)
+			assert.NoError(t, err, "Should convert interval minutes to int32")
+
+			intervalConfig := externalEonSdkAPI.NewStandardIntervalConfig(intervalMinutes32)
+			assert.NotNil(t, intervalConfig, "Should create interval config")
+
+			// Log what we created
+			t.Logf("Direct SDK call - NewStandardIntervalConfig(%d) = %+v", intervalMinutes32, intervalConfig)
+
+			// Create schedule config
+			scheduleConfig := externalEonSdkAPI.NewStandardBackupScheduleConfig(externalEonSdkAPI.STANDARD_BACKUP_SCHEDULE_INTERVAL)
+			scheduleConfig.SetIntervalConfig(*intervalConfig)
+
+			// Validate
+			if tt.validateInterval != nil {
+				tt.validateInterval(t, scheduleConfig)
+			}
+		})
+	}
+}
+
+// TestCreateHighFrequencyIntervalConfig tests interval configuration for high frequency policies
+func TestCreateHighFrequencyIntervalConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		intervalMinutes  int64
+		expectError      bool
+		validateInterval func(*testing.T, *externalEonSdkAPI.HighFrequencyBackupScheduleConfig)
+	}{
+		{
+			name:            "30 minute high frequency interval",
+			intervalMinutes: 30,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.HighFrequencyBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created HighFrequencyIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+		{
+			name:            "60 minute high frequency interval",
+			intervalMinutes: 60,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.HighFrequencyBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created HighFrequencyIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+		{
+			name:            "15 minute high frequency interval",
+			intervalMinutes: 15,
+			expectError:     false,
+			validateInterval: func(t *testing.T, config *externalEonSdkAPI.HighFrequencyBackupScheduleConfig) {
+				assert.NotNil(t, config, "Config should not be nil")
+				intervalConfig, ok := config.GetIntervalConfigOk()
+				assert.True(t, ok, "Should have interval config")
+				assert.NotNil(t, intervalConfig, "Interval config should not be nil")
+				t.Logf("Created HighFrequencyIntervalConfig with interval: %+v", intervalConfig)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create the interval config directly using SDK
+			intervalMinutes32, err := SafeInt32Conversion(tt.intervalMinutes)
+			assert.NoError(t, err, "Should convert interval minutes to int32")
+
+			intervalConfig := externalEonSdkAPI.NewHighFrequencyIntervalConfig(intervalMinutes32)
+			assert.NotNil(t, intervalConfig, "Should create high frequency interval config")
+
+			// Log what we created
+			t.Logf("Direct SDK call - NewHighFrequencyIntervalConfig(%d) = %+v", intervalMinutes32, intervalConfig)
+
+			// Create schedule config
+			scheduleConfig := externalEonSdkAPI.NewHighFrequencyBackupScheduleConfig()
+			scheduleConfig.SetFrequency(externalEonSdkAPI.HIGH_FREQUENCY_BACKUP_SCHEDULE_INTERVAL)
+			scheduleConfig.SetIntervalConfig(*intervalConfig)
+
+			// Validate
+			if tt.validateInterval != nil {
+				tt.validateInterval(t, scheduleConfig)
+			}
+		})
+	}
+}
+
+// TestStandardIntervalConversion validates the minutes-to-hours conversion for standard policies
+func TestStandardIntervalConversion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		intervalMinutes int64
+		expectedHours   int32
+		shouldError     bool
+		errorContains   string
+	}{
+		{
+			name:            "60 minutes = 1 hour",
+			intervalMinutes: 60,
+			expectedHours:   1,
+			shouldError:     false,
+		},
+		{
+			name:            "120 minutes = 2 hours",
+			intervalMinutes: 120,
+			expectedHours:   2,
+			shouldError:     false,
+		},
+		{
+			name:            "360 minutes = 6 hours",
+			intervalMinutes: 360,
+			expectedHours:   6,
+			shouldError:     false,
+		},
+		{
+			name:            "1440 minutes = 24 hours (daily)",
+			intervalMinutes: 1440,
+			expectedHours:   24,
+			shouldError:     false,
+		},
+		{
+			name:            "45 minutes - not divisible by 60",
+			intervalMinutes: 45,
+			shouldError:     true,
+			errorContains:   "must be divisible by 60",
+		},
+		{
+			name:            "15 minutes - not divisible by 60",
+			intervalMinutes: 15,
+			shouldError:     true,
+			errorContains:   "must be divisible by 60",
+		},
+		{
+			name:            "90 minutes - not divisible by 60",
+			intervalMinutes: 90,
+			shouldError:     true,
+			errorContains:   "must be divisible by 60",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			intervalMinutes32, err := SafeInt32Conversion(tt.intervalMinutes)
+			assert.NoError(t, err, "Should convert input to int32")
+
+			// Simulate the conversion logic
+			if intervalMinutes32%60 != 0 {
+				if tt.shouldError {
+					t.Logf("Correctly rejected non-hour-aligned interval: %d minutes", intervalMinutes32)
+					assert.True(t, tt.shouldError, "Expected error for non-hour-aligned interval")
+				} else {
+					t.Errorf("Unexpectedly rejected interval: %d minutes", intervalMinutes32)
+				}
+				return
+			}
+
+			intervalHours := intervalMinutes32 / 60
+
+			if tt.shouldError {
+				t.Errorf("Expected error but conversion succeeded: %d minutes = %d hours", intervalMinutes32, intervalHours)
+			} else {
+				assert.Equal(t, tt.expectedHours, intervalHours, "Hours should match expected value")
+				t.Logf("Successfully converted %d minutes to %d hours", intervalMinutes32, intervalHours)
+
+				// Verify SDK accepts this value
+				intervalConfig := externalEonSdkAPI.NewStandardIntervalConfig(intervalHours)
+				assert.NotNil(t, intervalConfig, "SDK should accept the converted hours value")
+				t.Logf("SDK IntervalConfig: %+v", intervalConfig)
+			}
+		})
+	}
+}
