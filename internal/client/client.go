@@ -10,6 +10,24 @@ import (
 	externalEonSdkAPI "github.com/eon-io/eon-sdk-go"
 )
 
+// APIError represents an error from the Eon API with HTTP status code
+type APIError struct {
+	StatusCode int
+	Message    string
+	Err        error
+}
+
+func (e *APIError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("API error %d: %s: %v", e.StatusCode, e.Message, e.Err)
+	}
+	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Message)
+}
+
+func (e *APIError) Unwrap() error {
+	return e.Err
+}
+
 // EonClient wraps the Eon SDK client with authentication and configuration
 type EonClient struct {
 	client       *externalEonSdkAPI.APIClient
@@ -82,9 +100,17 @@ func (c *EonClient) handleAPIError(err error, httpResp *http.Response, baseError
 	if err != nil && httpResp != nil {
 		defer httpResp.Body.Close()
 		if body, readErr := io.ReadAll(httpResp.Body); readErr == nil && len(body) > 0 {
-			return fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+			return &APIError{
+				StatusCode: httpResp.StatusCode,
+				Message:    string(body),
+				Err:        err,
+			}
 		}
-		return fmt.Errorf("%s: %w", baseErrorMsg, err)
+		return &APIError{
+			StatusCode: httpResp.StatusCode,
+			Message:    baseErrorMsg,
+			Err:        err,
+		}
 	} else if err != nil {
 		return fmt.Errorf("%s: %w", baseErrorMsg, err)
 	}
@@ -534,4 +560,122 @@ func (c *EonClient) DeleteBackupPolicy(ctx context.Context, policyId string) err
 	}
 
 	return nil
+}
+
+// CreateVault creates a new backup vault
+func (c *EonClient) CreateVault(ctx context.Context, req externalEonSdkAPI.CreateVaultRequest) (*externalEonSdkAPI.BackupVault, error) {
+	if err := c.ensureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.VaultsAPI.CreateVault(ctx, c.ProjectID).CreateVaultRequest(req).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to create vault"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, &APIError{
+			StatusCode: httpResp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	vault := resp.GetVault()
+	return &vault, nil
+}
+
+// GetVault retrieves a vault by ID
+func (c *EonClient) GetVault(ctx context.Context, vaultId string) (*externalEonSdkAPI.BackupVault, error) {
+	if err := c.ensureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.VaultsAPI.GetVault(ctx, vaultId, c.ProjectID).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to get vault"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, &APIError{
+			StatusCode: httpResp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	vault := resp.GetVault()
+	return &vault, nil
+}
+
+// UpdateVault updates a vault's display name
+func (c *EonClient) UpdateVault(ctx context.Context, vaultId string, req externalEonSdkAPI.UpdateVaultRequest) (*externalEonSdkAPI.BackupVault, error) {
+	if err := c.ensureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.VaultsAPI.UpdateVault(ctx, vaultId, c.ProjectID).UpdateVaultRequest(req).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to update vault"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	vault := resp.GetVault()
+	return &vault, nil
+}
+
+// ListVaults retrieves all vaults for the project
+func (c *EonClient) ListVaults(ctx context.Context) ([]externalEonSdkAPI.BackupVault, error) {
+	if err := c.ensureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	var allVaults []externalEonSdkAPI.BackupVault
+	var pageToken *string
+
+	// Handle pagination to fetch all vaults
+	for {
+		req := c.client.VaultsAPI.ListVaults(ctx, c.ProjectID)
+		if pageToken != nil {
+			req = req.PageToken(*pageToken)
+		}
+
+		resp, httpResp, err := req.Execute()
+		if apiErr := c.handleAPIError(err, httpResp, "failed to list vaults"); apiErr != nil {
+			if httpResp != nil {
+				_ = httpResp.Body.Close()
+			}
+			return nil, apiErr
+		}
+
+		if httpResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(httpResp.Body)
+			_ = httpResp.Body.Close()
+			return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+		}
+
+		if resp.GetVaults() != nil {
+			allVaults = append(allVaults, resp.GetVaults()...)
+		}
+
+		// Check if there are more pages
+		hasMorePages := resp.NextToken != nil && *resp.NextToken != ""
+
+		// Close response body immediately after processing
+		_ = httpResp.Body.Close()
+
+		if !hasMorePages {
+			break
+		}
+		pageToken = resp.NextToken
+	}
+
+	return allVaults, nil
 }
