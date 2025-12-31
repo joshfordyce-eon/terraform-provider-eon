@@ -13,20 +13,37 @@ Connects a restore account to the Eon project.
 ## Example Usage
 
 ```terraform
-# Example: Connect an AWS restore account for disaster recovery
+# Example: Connect an AWS restore account using the new aws block (recommended)
 resource "eon_restore_account" "aws_disaster_recovery" {
-  name                = "Disaster Recovery AWS Account"
-  cloud_provider      = "AWS"
-  provider_account_id = "555666777888"
-  role                = "arn:aws:iam::555666777888:role/EonRestoreRole"
+  name           = "Disaster Recovery AWS Account"
+  cloud_provider = "AWS"
+
+  aws {
+    role_arn = "arn:aws:iam::555666777888:role/EonRestoreRole"
+  }
 }
 
-# Example: Connect an AWS restore account for testing
-resource "eon_restore_account" "aws_test_restore" {
-  name                = "Test Restore AWS Account"
-  cloud_provider      = "AWS"
-  provider_account_id = "111222333444"
-  role                = "arn:aws:iam::111222333444:role/EonTestRestoreRole"
+# Example: Connect an Azure restore account (subscription)
+resource "eon_restore_account" "azure_subscription" {
+  name           = "Disaster Recovery Azure Subscription"
+  cloud_provider = "AZURE"
+
+  azure {
+    tenant_id       = "ae5f2819-f24d-4e4b-990e-0e24fd4c5682"
+    subscription_id = "cbb5ec02-4c52-4c6e-b262-d1c63effae51"
+  }
+}
+
+# Example: Connect an Azure restore account with resource group scoping
+resource "eon_restore_account" "azure_scoped" {
+  name           = "Azure Restore to Specific RG"
+  cloud_provider = "AZURE"
+
+  azure {
+    tenant_id           = "ae5f2819-f24d-4e4b-990e-0e24fd4c5682"
+    subscription_id     = "cbb5ec02-4c52-4c6e-b262-d1c63effae51"
+    resource_group_name = "my-restore-resources"
+  }
 }
 
 # Output the account details
@@ -38,7 +55,17 @@ output "aws_disaster_recovery_account" {
     status              = eon_restore_account.aws_disaster_recovery.status
     provider_account_id = eon_restore_account.aws_disaster_recovery.provider_account_id
     cloud_provider      = eon_restore_account.aws_disaster_recovery.cloud_provider
-    created_at          = eon_restore_account.aws_disaster_recovery.created_at
+  }
+}
+
+output "azure_restore_account" {
+  description = "Details of the connected Azure restore account"
+  value = {
+    id                  = eon_restore_account.azure_subscription.id
+    name                = eon_restore_account.azure_subscription.name
+    status              = eon_restore_account.azure_subscription.status
+    provider_account_id = eon_restore_account.azure_subscription.provider_account_id
+    cloud_provider      = eon_restore_account.azure_subscription.cloud_provider
   }
 }
 ```
@@ -50,15 +77,34 @@ output "aws_disaster_recovery_account" {
 
 - `cloud_provider` (String) Cloud provider. Possible values: `AWS`, `AZURE`, `GCP`.
 - `name` (String) Account display name in Eon.
-- `provider_account_id` (String) Cloud-provider-assigned account ID.
 
 ### Optional
 
-- `role` (String) ARN of the role Eon assumes to access the account in AWS. **Required when creating new accounts**. Optional for imported accounts that already have a role configured in Eon.
+- `aws` (Block, Optional) AWS-specific configuration. Required when `cloud_provider` is `AWS`. (see [below for nested schema](#nestedblock--aws))
+- `azure` (Block, Optional) Azure-specific configuration. Required when `cloud_provider` is `AZURE`. (see [below for nested schema](#nestedblock--azure))
+- `role` (String, Deprecated) **Deprecated:** Use `aws { role_arn = "..." }` instead. ARN of the role Eon assumes to access the account in AWS.
 
 ### Read-Only
 
 - `created_at` (String) Date and time the restore account was connected to the Eon project.
 - `id` (String) Eon-assigned restore account ID.
+- `provider_account_id` (String, Deprecated) Cloud-provider-assigned account ID (AWS account ID or Azure subscription ID). Computed from the `aws` or `azure` block.
 - `status` (String) Connection status of the AWS account, Azure subscription, or GCP project. Only `CONNECTED` restore accounts can be restored to. Possible values: `CONNECTED`, `DISCONNECTED`, `INSUFFICIENT_PERMISSIONS`.
 - `updated_at` (String) Date and time the restore account was last updated.
+
+<a id="nestedblock--aws"></a>
+### Nested Schema for `aws`
+
+Optional:
+
+- `role_arn` (String) ARN of the IAM role Eon assumes to access the account. Required when using the aws block.
+
+
+<a id="nestedblock--azure"></a>
+### Nested Schema for `azure`
+
+Optional:
+
+- `resource_group_name` (String) Scope restores to this resource group. When provided, only resources in this resource group can be restored to.
+- `subscription_id` (String) Azure subscription ID. Required when using the azure block.
+- `tenant_id` (String) Azure Active Directory tenant ID. Required when using the azure block.
