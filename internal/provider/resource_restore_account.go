@@ -39,6 +39,7 @@ type RestoreAccountResourceModel struct {
 	UpdatedAt         types.String             `tfsdk:"updated_at"`
 	Aws               *AwsAccountConfigModel   `tfsdk:"aws"`
 	Azure             *AzureAccountConfigModel `tfsdk:"azure"`
+	Gcp               *GcpAccountConfigModel   `tfsdk:"gcp"`
 }
 
 func (r *RestoreAccountResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -94,6 +95,7 @@ func (r *RestoreAccountResource) Schema(ctx context.Context, req resource.Schema
 		Blocks: map[string]schema.Block{
 			CloudProviderAWS.BlockName():   awsSchemaBlock(),
 			CloudProviderAzure.BlockName(): azureSchemaBlock("Scope restores to this resource group. When provided, only resources in this resource group can be restored to."),
+			CloudProviderGCP.BlockName():   gcpSchemaBlock(),
 		},
 	}
 }
@@ -176,10 +178,34 @@ func (r *RestoreAccountResource) Create(ctx context.Context, req resource.Create
 			"subscription_id": data.Azure.SubscriptionId.ValueString(),
 		})
 
+	case CloudProviderGCP:
+		if data.Gcp == nil {
+			resp.Diagnostics.AddError(
+				"Missing Configuration",
+				"The 'gcp' block is required when cloud_provider is GCP.",
+			)
+			return
+		}
+		if data.Gcp.ProjectId.IsNull() || data.Gcp.ServiceAccount.IsNull() {
+			resp.Diagnostics.AddError(
+				"Missing Configuration",
+				"Both 'project_id' and 'service_account' are required in the gcp block.",
+			)
+			return
+		}
+		gcpConfig := externalEonSdkAPI.NewGcpRestoreAccountAttributesInput(data.Gcp.ServiceAccount.ValueString())
+		config.SetGcp(*gcpConfig)
+
+		tflog.Debug(ctx, "Connecting GCP restore account", map[string]interface{}{
+			"name":            data.Name.ValueString(),
+			"project_id":      data.Gcp.ProjectId.ValueString(),
+			"service_account": data.Gcp.ServiceAccount.ValueString(),
+		})
+
 	default:
 		resp.Diagnostics.AddError(
 			"Unsupported Provider",
-			fmt.Sprintf("Cloud provider '%s' is not supported. Supported values: AWS, AZURE.", cloudProvider),
+			fmt.Sprintf("Cloud provider '%s' is not supported. Supported values: AWS, AZURE, GCP.", cloudProvider),
 		)
 		return
 	}
@@ -271,6 +297,7 @@ func (r *RestoreAccountResource) Read(ctx context.Context, req resource.ReadRequ
 					data.Role = types.StringValue(awsAttrs.GetRoleArn())
 				}
 				data.Azure = nil
+				data.Gcp = nil
 			case CloudProviderAzure:
 				if account.RestoreAccountAttributes.HasAzure() {
 					azureAttrs := account.RestoreAccountAttributes.GetAzure()
@@ -283,6 +310,18 @@ func (r *RestoreAccountResource) Read(ctx context.Context, req resource.ReadRequ
 					}
 				}
 				data.Aws = nil
+				data.Gcp = nil
+				data.Role = types.StringNull()
+			case CloudProviderGCP:
+				if account.RestoreAccountAttributes.HasGcp() {
+					gcpAttrs := account.RestoreAccountAttributes.GetGcp()
+					data.Gcp = &GcpAccountConfigModel{
+						ProjectId:      types.StringValue(account.GetProviderAccountId()),
+						ServiceAccount: types.StringValue(gcpAttrs.GetServiceAccount()),
+					}
+				}
+				data.Aws = nil
+				data.Azure = nil
 				data.Role = types.StringNull()
 			}
 
@@ -390,6 +429,14 @@ func (r *RestoreAccountResource) ImportState(ctx context.Context, req resource.I
 						data.Azure.ResourceGroupName = types.StringValue(azureAttrs.GetResourceGroupName())
 					}
 				}
+			case CloudProviderGCP:
+				if account.RestoreAccountAttributes.HasGcp() {
+					gcpAttrs := account.RestoreAccountAttributes.GetGcp()
+					data.Gcp = &GcpAccountConfigModel{
+						ProjectId:      types.StringValue(account.GetProviderAccountId()),
+						ServiceAccount: types.StringValue(gcpAttrs.GetServiceAccount()),
+					}
+				}
 			}
 
 			data.CreatedAt = types.StringValue(time.Now().Format(time.RFC3339))
@@ -444,6 +491,13 @@ func (r *RestoreAccountResource) findExistingAccountID(ctx context.Context, clou
 			if data.Azure != nil && account.RestoreAccountAttributes.HasAzure() {
 				// Match by subscription_id (the unique identifier for Azure accounts)
 				if account.GetProviderAccountId() == data.Azure.SubscriptionId.ValueString() {
+					return account.Id
+				}
+			}
+		case CloudProviderGCP:
+			if data.Gcp != nil && account.RestoreAccountAttributes.HasGcp() {
+				// Match by project_id (the unique identifier for GCP accounts)
+				if account.GetProviderAccountId() == data.Gcp.ProjectId.ValueString() {
 					return account.Id
 				}
 			}
