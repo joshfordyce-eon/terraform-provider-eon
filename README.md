@@ -7,8 +7,9 @@ The Terraform provider for Eon allows you to manage your cloud backup and restor
 - **Source Account Management**: Connect and manage cloud accounts containing resources to be backed up
 - **Restore Account Management**: Connect and manage cloud accounts where backups can be restored
 - **Backup Policy Management**: Create, update, and manage backup policies with schedules, retention, and notifications
+- **Roles & IDP Groups**: Create custom roles with permissions and access conditions; map Identity Provider (Okta, SAML) groups to Eon roles for user access
 - **Multi-Cloud Support**: AWS, Azure, and GCP
-- **Data Sources**: Query existing source and restore accounts, backup policies, and snapshots
+- **Data Sources**: Query existing source and restore accounts, backup policies, snapshots, roles, and IDP groups
 
 ## Requirements
 
@@ -183,6 +184,29 @@ resource "eon_backup_policy" "all_resources" {
 }
 ```
 
+### Custom Role and IDP Group
+
+```hcl
+# Create a custom role with permissions
+resource "eon_role" "viewer" {
+  name = "Viewer (Custom)"
+
+  permission_grants = [
+    { permission = "dashboard.view" },
+    { permission = "inventory.view" },
+    { permission = "jobs.view" },
+  ]
+}
+
+# Map an Identity Provider group to Eon roles (e.g. Okta, SAML)
+resource "eon_idp_group" "viewers" {
+  idp_id            = "your-idp-id"
+  provider_group_id = "your-idp-group-id-for-viewers"
+
+  role_ids = [eon_role.viewer.id]
+}
+```
+
 ### Data Sources
 
 ```hcl
@@ -195,12 +219,22 @@ data "eon_restore_accounts" "all" {}
 # List all backup policies
 data "eon_backup_policies" "all" {}
 
+# List all roles (built-in and custom)
+data "eon_roles" "all" {}
+
+# List all IDP groups and their role assignments
+data "eon_idp_groups" "all" {}
+
 output "source_account_count" {
   value = length(data.eon_source_accounts.all.accounts)
 }
 
 output "backup_policy_count" {
   value = length(data.eon_backup_policies.all.policies)
+}
+
+output "roles_count" {
+  value = length(data.eon_roles.all.roles)
 }
 ```
 
@@ -266,6 +300,36 @@ Manages restore accounts for restore operations.
 - `created_at` - Creation timestamp
 - `updated_at` - Last update timestamp
 
+### `eon_role`
+
+Creates and manages a custom role in Eon. Custom roles define a set of permissions and optional access conditions that restrict which resources the permissions apply to. Built-in roles cannot be created or modified.
+
+**Arguments:**
+
+- `name` (Required) - Display name of the role (must be unique in your Eon account)
+- `permission_grants` (Required) - List of permissions granted by the role (e.g. `dashboard.view`, `vaults.manage`, `snapshots.take_or_convert`). Each entry can optionally set `access_condition_id` to scope the permission to specific resources
+- `access_conditions` (Optional) - List of access conditions (id, effect, expression) that can be referenced by `permission_grants` to restrict scope
+
+**Attributes:**
+
+- `id` - Role identifier (use in `eon_idp_group.role_ids` to assign this role to an IDP group)
+
+**IDP integration:** Reference roles in IDP groups with `eon_idp_group.role_ids = [eon_role.example.id]`, or use the `eon_roles` data source to look up role IDs by name (e.g. for built-in roles like Admin).
+
+### `eon_idp_group`
+
+Creates and manages an IDP (Identity Provider) group mapping. An IDP group maps a group from your Identity Provider (e.g. Okta, SAML) to one or more Eon roles. Users in that IdP group receive the assigned roles in Eon.
+
+**Arguments:**
+
+- `idp_id` (Required) - The ID of the Identity Provider this group belongs to
+- `provider_group_id` (Required) - The group identifier from the Identity Provider (e.g. Okta group ID, SAML group name)
+- `role_ids` (Required) - List of Eon role IDs assigned to this IDP group. Reference `eon_role` resources (e.g. `[eon_role.viewer.id]`) or use the `eon_roles` data source to look up by name
+
+**Attributes:**
+
+- `id` - System-generated unique identifier for the IDP group
+
 ### `eon_backup_policy`
 
 Manages backup policies for automated backup operations.
@@ -313,3 +377,19 @@ Retrieves information about all backup policies.
 **Attributes:**
 
 - `policies` - List of backup policy objects with `id`, `name`, and `enabled`
+
+### `eon_roles`
+
+Retrieves a list of roles in the Eon account, including built-in and custom roles. Use to look up role IDs by name for `eon_idp_group.role_ids` or to filter built-in vs custom roles.
+
+**Attributes:**
+
+- `roles` - List of role objects with `id`, `name`, `is_built_in_role`, and `permission_grants`
+
+### `eon_idp_groups`
+
+Retrieves a list of IDP (Identity Provider) groups and their role assignments in the Eon account.
+
+**Attributes:**
+
+- `groups` - List of IDP group objects with `id`, `idp_id`, `provider_group_id`, and `role_ids`

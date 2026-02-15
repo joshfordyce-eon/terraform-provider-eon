@@ -764,7 +764,7 @@ func (c *EonClient) ListIdpGroups(ctx context.Context) ([]externalEonSdkAPI.IdpG
 	var pageToken *string
 
 	for {
-		req := c.client.IamAPI.ListIdpGroups(ctx).PageSize(1000)
+		req := c.client.IamAPI.ListIdpGroups(ctx).PageSize(100)
 		if pageToken != nil {
 			req = req.PageToken(*pageToken)
 		}
@@ -831,6 +831,112 @@ func (c *EonClient) DeleteIdpGroup(ctx context.Context, groupId string) error {
 
 	httpResp, err := c.client.IamAPI.DeleteIdpGroup(ctx, groupId).Execute()
 	if apiErr := c.handleAPIError(err, httpResp, "failed to delete IDP group"); apiErr != nil {
+		return apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(httpResp.Body)
+		return fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// ListRoles retrieves all roles for the account.
+func (c *EonClient) ListRoles(ctx context.Context) ([]externalEonSdkAPI.Role, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.IamAPI.ListRoles(ctx).PageSize(100).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to list roles"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	if resp.GetRoles() == nil {
+		return []externalEonSdkAPI.Role{}, nil
+	}
+	return resp.GetRoles(), nil
+}
+
+// GetRole retrieves a role by ID.
+func (c *EonClient) GetRole(ctx context.Context, roleId string) (*externalEonSdkAPI.Role, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.IamAPI.GetRole(ctx, roleId).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to get role"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	role := resp.GetRole()
+	return &role, nil
+}
+
+// CreateRole creates a new custom role.
+func (c *EonClient) CreateRole(ctx context.Context, req externalEonSdkAPI.CreateRoleRequest) (*externalEonSdkAPI.Role, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.IamAPI.CreateRole(ctx).CreateRoleRequest(req).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to create role"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	role := resp.GetRole()
+	return &role, nil
+}
+
+// UpdateRole updates an existing role.
+func (c *EonClient) UpdateRole(ctx context.Context, roleId string, req externalEonSdkAPI.UpdateRoleRequest) (*externalEonSdkAPI.Role, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.IamAPI.UpdateRole(ctx, roleId).UpdateRoleRequest(req).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to update role"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	role := resp.GetRole()
+	return &role, nil
+}
+
+// DeleteRole deletes a role.
+func (c *EonClient) DeleteRole(ctx context.Context, roleId string) error {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	httpResp, err := c.client.IamAPI.DeleteRole(ctx, roleId).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to delete role"); apiErr != nil {
 		return apiErr
 	}
 	defer httpResp.Body.Close()

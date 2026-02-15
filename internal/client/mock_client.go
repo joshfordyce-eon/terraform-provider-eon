@@ -17,6 +17,7 @@ type MockEonClient struct {
 	// Storage for mock data
 	BackupPolicies map[string]*externalEonSdkAPI.BackupPolicy
 	IdpGroups      map[string]*externalEonSdkAPI.IdpGroup
+	Roles          map[string]*externalEonSdkAPI.Role
 
 	// Behavior controls
 	ShouldFailCreate bool
@@ -52,6 +53,7 @@ func NewMockEonClient() *MockEonClient {
 	return &MockEonClient{
 		BackupPolicies: make(map[string]*externalEonSdkAPI.BackupPolicy),
 		IdpGroups:      make(map[string]*externalEonSdkAPI.IdpGroup),
+		Roles:          make(map[string]*externalEonSdkAPI.Role),
 		ProjectID:      "mock-project-id",
 	}
 }
@@ -186,6 +188,7 @@ func (m *MockEonClient) Reset() {
 
 	m.BackupPolicies = make(map[string]*externalEonSdkAPI.BackupPolicy)
 	m.IdpGroups = make(map[string]*externalEonSdkAPI.IdpGroup)
+	m.Roles = make(map[string]*externalEonSdkAPI.Role)
 	m.CreateCalls = 0
 	m.ReadCalls = 0
 	m.UpdateCalls = 0
@@ -329,4 +332,88 @@ func (m *MockEonClient) AddMockIdpGroup(group *externalEonSdkAPI.IdpGroup) {
 	defer m.mu.Unlock()
 
 	m.IdpGroups[group.Id] = group
+}
+
+// ListRoles mocks listing roles
+func (m *MockEonClient) ListRoles(ctx context.Context) ([]externalEonSdkAPI.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	roles := make([]externalEonSdkAPI.Role, 0, len(m.Roles))
+	for _, r := range m.Roles {
+		roles = append(roles, *r)
+	}
+	sort.Slice(roles, func(i, j int) bool { return roles[i].Id < roles[j].Id })
+	return roles, nil
+}
+
+// GetRole mocks getting a role by ID
+func (m *MockEonClient) GetRole(ctx context.Context, roleId string) (*externalEonSdkAPI.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, exists := m.Roles[roleId]
+	if !exists {
+		return nil, fmt.Errorf("role not found: %s", roleId)
+	}
+	return r, nil
+}
+
+// CreateRole mocks creating a role
+func (m *MockEonClient) CreateRole(ctx context.Context, req externalEonSdkAPI.CreateRoleRequest) (*externalEonSdkAPI.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := fmt.Sprintf("mock-role-%d", len(m.Roles)+1)
+	role := &externalEonSdkAPI.Role{
+		Id:              id,
+		Name:            req.GetName(),
+		IsBuiltInRole:    false,
+		PermissionGrants: permissionGrantInputToGrant(req.GetPermissionGrants()),
+	}
+	if req.AccessConditions != nil {
+		role.AccessConditions = req.AccessConditions
+	}
+	m.Roles[id] = role
+	return role, nil
+}
+
+func permissionGrantInputToGrant(in []externalEonSdkAPI.PermissionGrantInput) []externalEonSdkAPI.PermissionGrant {
+	out := make([]externalEonSdkAPI.PermissionGrant, 0, len(in))
+	for _, p := range in {
+		g := externalEonSdkAPI.PermissionGrant{Permission: p.Permission, AccessConditionId: p.AccessConditionId}
+		out = append(out, g)
+	}
+	return out
+}
+
+// UpdateRole mocks updating a role
+func (m *MockEonClient) UpdateRole(ctx context.Context, roleId string, req externalEonSdkAPI.UpdateRoleRequest) (*externalEonSdkAPI.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, exists := m.Roles[roleId]
+	if !exists {
+		return nil, fmt.Errorf("role not found: %s", roleId)
+	}
+	r.Name = req.GetName()
+	r.PermissionGrants = permissionGrantInputToGrant(req.GetPermissionGrants())
+	if req.AccessConditions != nil {
+		r.AccessConditions = req.AccessConditions
+	}
+	m.Roles[roleId] = r
+	return r, nil
+}
+
+// DeleteRole mocks deleting a role
+func (m *MockEonClient) DeleteRole(ctx context.Context, roleId string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, exists := m.Roles[roleId]
+	if !exists {
+		return fmt.Errorf("role not found: %s", roleId)
+	}
+	delete(m.Roles, roleId)
+	return nil
 }
