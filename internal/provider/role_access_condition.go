@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	externalEonSdkAPI "github.com/eon-io/eon-sdk-go"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -113,7 +114,7 @@ func roleAccessConditionOperandsSchema() map[string]schema.Attribute {
 			MarkdownDescription: "Resource group name condition",
 			Optional:            true,
 			Attributes: map[string]schema.Attribute{
-				"operator":              schema.StringAttribute{Required: true},
+				"operator":             schema.StringAttribute{Required: true},
 				"resource_group_names": schema.ListAttribute{ElementType: types.StringType, Required: true},
 			},
 		},
@@ -395,6 +396,13 @@ func roleAccessConditionsToSDK(ctx context.Context, list types.List) ([]external
 			if sdkExpr != nil {
 				expr = *externalEonSdkAPI.NewNullableAccessConditionalExpression(sdkExpr)
 			}
+		}
+		// API requires each access condition to have an expression; reject empty expression
+		if !expr.IsSet() {
+			return nil, diag.Diagnostics{diag.NewErrorDiagnostic(
+				"InvalidExpression",
+				fmt.Sprintf("access_conditions entry %q must have an expression (e.g. data_classes, environment, resource_type, tag_keys, or group). The API requires each data access rule to have a condition or expression.", m.Id.ValueString()),
+			)}
 		}
 		ac := externalEonSdkAPI.NewAccessCondition(
 			m.Id.ValueString(),
@@ -734,22 +742,41 @@ func flattenRoleAccessConditions(ctx context.Context, conds []externalEonSdkAPI.
 	return types.ListValue(types.ObjectType{AttrTypes: attrTypes}, elems)
 }
 
+// objectValueWithAllAttrs ensures the Object has a value for every key in attrTypes (null if not set).
+// Terraform plugin framework requires Object values to include all attributes.
+func objectValueWithAllAttrs(attrTypes map[string]attr.Type, partial map[string]attr.Value) (types.Object, diag.Diagnostics) {
+	full := make(map[string]attr.Value, len(attrTypes))
+	for k, t := range attrTypes {
+		if v, ok := partial[k]; ok {
+			full[k] = v
+		} else {
+			ot, ok := t.(types.ObjectType)
+			if !ok {
+				full[k] = types.StringNull() // fallback for non-object (e.g. group.operator)
+				continue
+			}
+			full[k] = types.ObjectNull(ot.AttrTypes)
+		}
+	}
+	return types.ObjectValue(attrTypes, full)
+}
+
 // roleOperandAttrTypes is the attr type map for a single operand (no nested group).
 var roleOperandAttrTypes = map[string]attr.Type{
-	"environment":        types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "environments": types.ListType{ElemType: types.StringType}}},
-	"resource_type":      types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_types": types.ListType{ElemType: types.StringType}}},
-	"data_classes":      types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "data_classes": types.ListType{ElemType: types.StringType}}},
-	"tag_keys":           types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "tag_keys": types.ListType{ElemType: types.StringType}}},
-	"tag_key_values":     types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "tag_key_values": types.ListType{ElemType: types.ObjectType{AttrTypes: map[string]attr.Type{"key": types.StringType, "value": types.StringType}}}}},
-	"apps":               types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "apps": types.ListType{ElemType: types.StringType}}},
-	"cloud_provider":     types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "cloud_providers": types.ListType{ElemType: types.StringType}}},
-	"account_id":         types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "account_ids": types.ListType{ElemType: types.StringType}}},
-	"source_region":     types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "source_regions": types.ListType{ElemType: types.StringType}}},
-	"vpc":                types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "vpcs": types.ListType{ElemType: types.StringType}}},
-	"subnets":            types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "subnets": types.ListType{ElemType: types.StringType}}},
+	"environment":         types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "environments": types.ListType{ElemType: types.StringType}}},
+	"resource_type":       types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_types": types.ListType{ElemType: types.StringType}}},
+	"data_classes":        types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "data_classes": types.ListType{ElemType: types.StringType}}},
+	"tag_keys":            types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "tag_keys": types.ListType{ElemType: types.StringType}}},
+	"tag_key_values":      types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "tag_key_values": types.ListType{ElemType: types.ObjectType{AttrTypes: map[string]attr.Type{"key": types.StringType, "value": types.StringType}}}}},
+	"apps":                types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "apps": types.ListType{ElemType: types.StringType}}},
+	"cloud_provider":      types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "cloud_providers": types.ListType{ElemType: types.StringType}}},
+	"account_id":          types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "account_ids": types.ListType{ElemType: types.StringType}}},
+	"source_region":       types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "source_regions": types.ListType{ElemType: types.StringType}}},
+	"vpc":                 types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "vpcs": types.ListType{ElemType: types.StringType}}},
+	"subnets":             types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "subnets": types.ListType{ElemType: types.StringType}}},
 	"resource_group_name": types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_group_names": types.ListType{ElemType: types.StringType}}},
-	"resource_name":     types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_names": types.ListType{ElemType: types.StringType}}},
-	"resource_id":       types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_ids": types.ListType{ElemType: types.StringType}}},
+	"resource_name":       types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_names": types.ListType{ElemType: types.StringType}}},
+	"resource_id":         types.ObjectType{AttrTypes: map[string]attr.Type{"operator": types.StringType, "resource_ids": types.ListType{ElemType: types.StringType}}},
 }
 
 // roleExpressionAttrTypes includes group (operands use roleOperandAttrTypes).
@@ -950,7 +977,18 @@ func flattenAccessConditionalExpression(ctx context.Context, expr externalEonSdk
 			if d.HasError() {
 				return types.ObjectNull(roleExpressionAttrTypes), d
 			}
-			operandVals = append(operandVals, flat)
+			// Operands list expects objects with roleOperandAttrTypes (no "group"); copy set keys from flat.
+			partial := make(map[string]attr.Value)
+			for k := range roleOperandAttrTypes {
+				if v, ok := flat.Attributes()[k]; ok && v != nil && !v.IsNull() {
+					partial[k] = v
+				}
+			}
+			operandObj, d := objectValueWithAllAttrs(roleOperandAttrTypes, partial)
+			if d.HasError() {
+				return types.ObjectNull(roleExpressionAttrTypes), d
+			}
+			operandVals = append(operandVals, operandObj)
 		}
 		operandsList, _ := types.ListValue(types.ObjectType{AttrTypes: roleOperandAttrTypes}, operandVals)
 		groupObj, _ := types.ObjectValue(map[string]attr.Type{"operator": types.StringType, "operands": types.ListType{ElemType: types.ObjectType{AttrTypes: roleOperandAttrTypes}}}, map[string]attr.Value{
@@ -961,5 +999,5 @@ func flattenAccessConditionalExpression(ctx context.Context, expr externalEonSdk
 	if len(attrs) == 0 {
 		return types.ObjectNull(roleExpressionAttrTypes), nil
 	}
-	return types.ObjectValue(roleExpressionAttrTypes, attrs)
+	return objectValueWithAllAttrs(roleExpressionAttrTypes, attrs)
 }
