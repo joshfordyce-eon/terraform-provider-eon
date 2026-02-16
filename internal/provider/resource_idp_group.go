@@ -59,7 +59,7 @@ func (r *IdpGroupResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"role_ids": schema.ListAttribute{
 				ElementType:         types.StringType,
-				MarkdownDescription: "List of Eon role IDs assigned to this IDP group. You can reference `eon_role` resources (e.g. `role_ids = [eon_role.admin.id]`) or the `eon_roles` data source (e.g. `role_ids = [for r in data.eon_roles.roles : r.id if r.name == \"Admin\"]`).",
+				MarkdownDescription: "List of Eon role IDs assigned to this IDP group. You can use: (1) `eon_role` resources (e.g. `role_ids = [eon_role.admin.id]`), or (2) the `eon_builtin_roles` data source for built-in roles (e.g. `role_ids = [data.eon_builtin_roles.builtin.global_admin]`). Raw UUIDs continue to work for backwards compatibility.",
 				Required:            true,
 			},
 		},

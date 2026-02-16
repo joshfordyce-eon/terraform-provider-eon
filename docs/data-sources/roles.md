@@ -29,7 +29,8 @@ locals {
   ]
 }
 
-# Example: Look up role ID by name (e.g. for use in eon_idp_group.role_ids)
+# Example: Map of role display name to role ID (for auditing/display only; display names can change)
+# For assigning built-in roles to IDP groups, use the eon_builtin_roles data source (stable keys) instead.
 locals {
   role_ids_by_name = {
     for r in data.eon_roles.all.roles :

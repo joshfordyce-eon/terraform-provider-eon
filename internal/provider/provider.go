@@ -194,6 +194,7 @@ func (p *EonProvider) DataSources(ctx context.Context) []func() datasource.DataS
 		NewVaultsDataSource,
 		NewIdpGroupsDataSource,
 		NewRolesDataSource,
+		NewBuiltinRolesDataSource,
 	}
 }
 

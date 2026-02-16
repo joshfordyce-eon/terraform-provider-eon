@@ -314,7 +314,7 @@ Creates and manages a custom role in Eon. Custom roles define a set of permissio
 
 - `id` - Role identifier (use in `eon_idp_group.role_ids` to assign this role to an IDP group)
 
-**IDP integration:** Reference roles in IDP groups with `eon_idp_group.role_ids = [eon_role.example.id]`, or use the `eon_roles` data source to look up role IDs by name (e.g. for built-in roles like Admin).
+**IDP integration:** Reference roles in IDP groups with `eon_idp_group.role_ids = [eon_role.example.id]`, or use the `eon_builtin_roles` data source for built-in roles (e.g. `data.eon_builtin_roles.builtin.global_admin`).
 
 ### `eon_idp_group`
 
@@ -324,7 +324,7 @@ Creates and manages an IDP (Identity Provider) group mapping. An IDP group maps 
 
 - `idp_id` (Required) - The ID of the Identity Provider this group belongs to
 - `provider_group_id` (Required) - The group identifier from the Identity Provider (e.g. Okta group ID, SAML group name)
-- `role_ids` (Required) - List of Eon role IDs assigned to this IDP group. Reference `eon_role` resources (e.g. `[eon_role.viewer.id]`) or use the `eon_roles` data source to look up by name
+- `role_ids` (Required) - List of Eon role IDs assigned to this IDP group. Reference `eon_role` resources or the `eon_builtin_roles` data source (stable keys for built-in roles); raw UUIDs are also supported
 
 **Attributes:**
 
@@ -380,11 +380,23 @@ Retrieves information about all backup policies.
 
 ### `eon_roles`
 
-Retrieves a list of roles in the Eon account, including built-in and custom roles. Use to look up role IDs by name for `eon_idp_group.role_ids` or to filter built-in vs custom roles.
+Retrieves a list of roles in the Eon account, including built-in and custom roles. Use to list roles and filter built-in vs custom roles. For assigning built-in roles to IDP groups, prefer the `eon_builtin_roles` data source (stable keys) over looking up by display name.
 
 **Attributes:**
 
 - `roles` - List of role objects with `id`, `name`, `is_built_in_role`, and `permission_grants`
+
+### `eon_builtin_roles`
+
+Provides EON built-in role UUIDs as flat attributes (Global Admin, Global Viewer, Viewer, Admin, Operator). Use in `eon_idp_group.role_ids` instead of hardcoding UUIDs (e.g. `data.eon_builtin_roles.builtin.global_admin`).
+
+**Attributes:**
+
+- `global_admin` - Built-in Global Admin role UUID
+- `global_viewer` - Built-in Global Viewer role UUID
+- `viewer` - Built-in Viewer role UUID
+- `admin` - Built-in Admin role UUID
+- `operator` - Built-in Operator role UUID
 
 ### `eon_idp_groups`
 

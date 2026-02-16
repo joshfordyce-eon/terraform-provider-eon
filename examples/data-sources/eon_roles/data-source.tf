@@ -14,7 +14,8 @@ locals {
   ]
 }
 
-# Example: Look up role ID by name (e.g. for use in eon_idp_group.role_ids)
+# Example: Map of role display name to role ID (for auditing/display only; display names can change)
+# For assigning built-in roles to IDP groups, use the eon_builtin_roles data source (stable keys) instead.
 locals {
   role_ids_by_name = {
     for r in data.eon_roles.all.roles :
@@ -77,13 +78,9 @@ output "roles_with_access_conditions_count" {
 }
 
 output "role_ids_by_name" {
-  description = "Map of role name to role ID (for use in eon_idp_group.role_ids)"
+  description = "Map of role display name to role ID (for auditing/display only; for built-in roles in eon_idp_group use eon_builtin_roles instead)"
   value       = local.role_ids_by_name
 }
 
-# Example: Use role data in other resources (e.g. assign "Admin" role to an IDP group)
-# resource "eon_idp_group" "admins" {
-#   idp_id            = "your-idp-id"
-#   provider_group_id = "your-idp-group-id"
-#   role_ids          = [local.role_ids_by_name["Admin"]]
-# }
+# For assigning built-in roles (e.g. Admin) to IDP groups, use the eon_builtin_roles data source
+# (e.g. role_ids = [data.eon_builtin_roles.builtin.admin]), not lookup by display name.

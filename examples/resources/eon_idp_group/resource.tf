@@ -7,8 +7,8 @@ terraform {
 }
 
 # Example: IDP group that assigns custom roles (reference eon_role resources)
-resource "eon_role" "viewer" {
-  name = "Viewer (IDP Example)"
+resource "eon_role" "read_only" {
+  name = "Read-only (IDP Example)"
 
   permission_grants = [
     { permission = "dashboard.view" },
@@ -16,8 +16,8 @@ resource "eon_role" "viewer" {
   ]
 }
 
-resource "eon_role" "operator" {
-  name = "Operator (IDP Example)"
+resource "eon_role" "ops" {
+  name = "Ops (IDP Example)"
 
   permission_grants = [
     { permission = "dashboard.view" },
@@ -27,32 +27,64 @@ resource "eon_role" "operator" {
   ]
 }
 
-resource "eon_idp_group" "viewers" {
+resource "eon_idp_group" "read_only" {
   idp_id            = "your-idp-id"
-  provider_group_id = "your-idp-group-id-for-viewers"
+  provider_group_id = "your-idp-group-id-for-read-only"
 
   role_ids = [
-    eon_role.viewer.id,
+    eon_role.read_only.id,
   ]
 }
 
 # Example: IDP group with multiple roles
-resource "eon_idp_group" "operators" {
+resource "eon_idp_group" "ops" {
   idp_id            = "your-idp-id"
-  provider_group_id = "your-idp-group-id-for-operators"
+  provider_group_id = "your-idp-group-id-for-ops"
 
   role_ids = [
-    eon_role.viewer.id,
-    eon_role.operator.id,
+    eon_role.read_only.id,
+    eon_role.ops.id,
   ]
 }
 
-# Optional: Use the eon_roles data source to assign roles by name instead of creating them
-# data "eon_roles" "all" {}
-#
-# resource "eon_idp_group" "admins" {
-#   idp_id            = "your-idp-id"
-#   provider_group_id = "your-idp-group-id-for-admins"
-#
-#   role_ids = [for r in data.eon_roles.all.roles : r.id if r.name == "Admin"]
-# }
+# ---------------------------------------------------------------------------
+# Assigning EON built-in roles to IDP groups
+# ---------------------------------------------------------------------------
+# Built-in roles (Global Admin, Global Viewer, Viewer, Admin, Operator)
+# can be assigned by raw UUID or by stable key via the eon_builtin_roles data source.
+
+# Example: Assign built-in roles by raw role ID (UUID)
+resource "eon_idp_group" "admins_by_id" {
+  idp_id            = "your-idp-id"
+  provider_group_id = "your-idp-group-id-for-admins-by-uuid"
+
+  role_ids = [
+    "379a1104-838a-4bf3-af96-da3af27c5712", # Global Admin
+    "a675e456-8602-4550-9c65-66583404e0d6", # Admin
+  ]
+}
+
+# Example: Assign built-in roles by stable key (recommended; keys are stable if display names change)
+data "eon_builtin_roles" "builtin" {}
+
+resource "eon_idp_group" "viewers_by_key" {
+  idp_id            = "your-idp-id"
+  provider_group_id = "your-idp-group-id-for-viewers-by-key"
+
+  role_ids = [
+    data.eon_builtin_roles.builtin.global_viewer,
+  ]
+}
+
+resource "eon_idp_group" "operators_by_key" {
+  idp_id            = "your-idp-id"
+  provider_group_id = "your-idp-group-id-for-operators-by-key"
+
+  role_ids = [
+    data.eon_builtin_roles.builtin.viewer,
+    data.eon_builtin_roles.builtin.operator,
+  ]
+}
+
+# For custom roles, create eon_role resources and reference them in role_ids.
+# For built-in roles, use data.eon_builtin_roles.builtin.<attribute> (e.g. .global_admin, .viewer; see above).
