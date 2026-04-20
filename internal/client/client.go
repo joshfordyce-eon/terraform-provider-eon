@@ -199,6 +199,80 @@ func (c *EonClient) DisconnectSourceAccount(ctx context.Context, accountId strin
 	return nil
 }
 
+// UpdateSourceAccountRequest contains the fields that can be updated on a source account.
+type UpdateSourceAccountRequest struct {
+	Name                    *string
+	SourceAccountAttributes *UpdateSourceAccountAttributes
+}
+
+// UpdateSourceAccountAttributes contains cloud-provider-specific attributes to update.
+type UpdateSourceAccountAttributes struct {
+	Aws *UpdateAwsSourceAccountAttributes
+}
+
+// UpdateAwsSourceAccountAttributes contains AWS-specific attributes to update.
+type UpdateAwsSourceAccountAttributes struct {
+	RoleArn *string
+}
+
+// UpdateSourceAccount updates mutable fields of a source account via
+// PATCH /v1/projects/{projectId}/source-accounts/{accountId}.
+func (c *EonClient) UpdateSourceAccount(ctx context.Context, accountId string, req UpdateSourceAccountRequest) (*externalEonSdkAPI.SourceAccount, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	sdkReq := externalEonSdkAPI.NewUpdateSourceAccountRequest()
+	if req.Name != nil {
+		sdkReq.SetName(*req.Name)
+	}
+	if req.SourceAccountAttributes != nil && req.SourceAccountAttributes.Aws != nil {
+		attrs := externalEonSdkAPI.NewUpdateSourceAccountAttributesInput()
+		awsAttrs := externalEonSdkAPI.UpdateAwsSourceAccountAttributes{}
+		if req.SourceAccountAttributes.Aws.RoleArn != nil {
+			awsAttrs.SetRoleArn(*req.SourceAccountAttributes.Aws.RoleArn)
+		}
+		attrs.SetAws(awsAttrs)
+		sdkReq.SetSourceAccountAttributes(*attrs)
+	}
+
+	resp, httpResp, err := c.client.AccountsAPI.UpdateSourceAccount(ctx, c.projectID, accountId).
+		UpdateSourceAccountRequest(*sdkReq).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to update source account"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	account := resp.GetSourceAccount()
+	return &account, nil
+}
+
+// ReconnectSourceAccount reconnects a previously disconnected source account
+func (c *EonClient) ReconnectSourceAccount(ctx context.Context, accountId string) (*externalEonSdkAPI.SourceAccount, error) {
+	if err := c.tokenRefresher.EnsureValidToken(); err != nil {
+		return nil, fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
+	resp, httpResp, err := c.client.AccountsAPI.ReconnectSourceAccount(ctx, c.projectID, accountId).Execute()
+	if apiErr := c.handleAPIError(err, httpResp, "failed to reconnect source account"); apiErr != nil {
+		return nil, apiErr
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(httpResp.Body)
+		return nil, fmt.Errorf("API error %d: %s", httpResp.StatusCode, string(body))
+	}
+
+	account := resp.GetSourceAccount()
+	return &account, nil
+}
+
 // ListSourceAwsOrganizationalUnits retrieves all source AWS organizational units for the project.
 // It paginates through all pages to return the complete list.
 func (c *EonClient) ListSourceAwsOrganizationalUnits(ctx context.Context) ([]externalEonSdkAPI.SourceAwsOrganizationalUnit, error) {
