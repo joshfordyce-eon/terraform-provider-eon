@@ -539,3 +539,59 @@ Required:
 
 - `effect` (String) Effect of the limit (e.g. ALLOW, DENY).
 - `restore_account_provider_ids` (List of String) List of restore account provider IDs to match against.
+
+
+
+## Available Permissions
+
+The following permission identifiers can be used in the `permissions` list. Permission validation occurs server-side during `terraform apply`.
+
+| Permission | Description |
+|------------|-------------|
+| `global_settings.view` | View global settings |
+| `source_accounts.manage` | Manage source accounts |
+| `vault_accounts.manage` | Manage vault accounts |
+| `cost_explorer.view` | View cost explorer |
+| `user_access.manage` | Manage user access |
+| `saml_group_access.manage` | Manage SAML group access |
+| `api_credentials.manage` | Manage API credentials |
+| `api_credentials.rotate_secret` | Rotate API credential secrets |
+| `custom_roles.manage` | Manage custom roles |
+| `dashboard.view` | View dashboard |
+| `inventory.view` | View inventory |
+| `jobs.view` | View jobs |
+| `audit_logs.view` | View audit logs |
+| `backup_settings.view` | View backup settings |
+| `storage_gateway.view` | View storage gateway |
+| `database_explorer.search` | Search database explorer |
+| `file_explorer.search` | Search file explorer |
+| `snapshots.take_or_convert` | Take or convert snapshots |
+| `resources.restore` | Restore resources |
+| `configuration.validate` | Validate configuration |
+| `files.restore` | Restore files |
+| `databases.query` | Query databases |
+| `data_classes.override` | Override data classes |
+| `environments.override` | Override environments |
+| `detected_apps.override` | Override detected apps |
+| `control_violations.mute` | Mute control violations |
+| `backup_exclusion.manage` | Manage backup exclusions |
+| `vaults.manage` | Manage vaults |
+| `restore_accounts.manage` | Manage restore accounts |
+| `backup_policies.manage` | Manage backup policies |
+| `discovery_configuration.manage` | Manage discovery configuration |
+| `backup_configuration.manage` | Manage backup configuration |
+| `controls.manage` | Manage controls |
+| `ransomware_detection.manage` | Manage ransomware detection |
+| `notification_policies.manage` | Manage notification policies |
+| `storage_gateway.manage` | Manage storage gateway |
+| `oauth_apps.manage` | Manage OAuth apps |
+| `zero_etl_policies.manage` | Manage Zero ETL policies |
+| `mpa_policies.manage` | Manage MPA policies |
+| `mpa_policies.view` | View MPA policies |
+| `mpa_requests.manage` | Manage MPA requests |
+
+**Note:** Permission validation occurs server-side. Invalid permissions will be rejected during `terraform apply` with a clear error message from the Eon API.
+
+---
+
+This table is derived directly from the `PermissionType` enum in `proto/apis/customer/customer.proto` using the verified conversion pattern: remove `PERMISSION_` prefix, convert to lowercase, replace underscore between resource and action with `.`
